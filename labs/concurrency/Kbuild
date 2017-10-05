@@ -1,0 +1,6 @@
+
+# kbuild part of makefile
+EXTRA_CFLAGS := -I$(src)/inc
+
+ccflags-y := -std=gnu99 -Wall -Wno-declaration-after-statement
+obj-m := multithreaded_module.o
