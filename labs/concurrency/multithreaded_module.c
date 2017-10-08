@@ -3,20 +3,42 @@
 #include <linux/printk.h>
 #include <linux/kthread.h>
 #include <linux/delay.h>
+#include <asm-generic/barrier.h>
 
 MODULE_AUTHOR("Halyna Butovych");
 MODULE_DESCRIPTION("Trying threads in Linux Kernel Training");
 MODULE_LICENSE("Dual BSD/GPL");
 
+#define MM_LOCK_BIT 0
+
 static int global_counter;
 static struct task_struct *thread1;
 static struct task_struct *thread2;
+static unsigned long lock_var;
+
+static inline void lock(unsigned long *l)
+{
+	while (unlikely(test_and_set_bit_lock(MM_LOCK_BIT, l)))
+		;
+}
+
+static inline void unlock(unsigned long *l)
+{
+	clear_bit_unlock(MM_LOCK_BIT, l);
+	/* if clear_bit is used for locking purposes, I should call
+	 * smp_mb__before_clear_bit and/or smp_mb__after_clear_bit in order to
+	 * ensure changes are visible on other processors
+	 */
+	smp_mb__after_atomic();
+}
 
 static int threadfn(void *data)
 {
 	pr_info("threadfn init\n");
 	for (int i = 0; i < 1000000 && !kthread_should_stop(); i++) {
+		lock(&lock_var);
 		global_counter++;
+		unlock(&lock_var);
 		ndelay(1);
 	}
 	pr_info("threadfn exit\n");
