@@ -16,6 +16,13 @@ static struct task_struct *thread1;
 static struct task_struct *thread2;
 static unsigned long lock_var;
 
+static int shared_data;
+DECLARE_RWSEM(sem_for_shared_data);
+static struct task_struct *reader1;
+static struct task_struct *reader2;
+static struct task_struct *writer1;
+static atomic_t readers_count = ATOMIC_INIT(0);
+
 static inline void lock(unsigned long *l)
 {
 	while (unlikely(test_and_set_bit_lock(MM_LOCK_BIT, l)))
@@ -45,6 +52,45 @@ static int threadfn(void *data)
 	return 0;
 }
 
+static int reader(void *data)
+{
+	const char *name = data;
+	BUG_ON(!name);
+	pr_info("reader %s init\n", name);
+	while (!kthread_should_stop()) {
+		down_read(&sem_for_shared_data);
+		int count = atomic_inc_return(&readers_count);
+		pr_info("reader %s reads: %d\n", name, shared_data);
+		/* blink before reading */
+		mdelay(1);
+		if (count > 1)
+			pr_info_once("the book seems to be popular\n");
+		atomic_dec(&readers_count);
+		up_read(&sem_for_shared_data);
+	}
+	pr_info("reader %s exit\n", name);
+	return 0;
+}
+
+static int writer(void *data)
+{
+	const char *name = data;
+	BUG_ON(!name);
+	pr_info("reader %s init\n", name);
+	while (!kthread_should_stop()) {
+		/* think about what to write */
+		mdelay(100);
+		down_write(&sem_for_shared_data);
+		BUG_ON(atomic_read(&readers_count));
+		/* think about what to write once more */
+		mdelay(10);
+		++shared_data;
+		up_write(&sem_for_shared_data);
+	}
+	pr_info("reader %s exit\n", name);
+	return 0;
+}
+
 static int __init multithreaded_module_init(void)
 {
 	pr_info("multithreaded_module_init\n");
@@ -56,6 +102,11 @@ static int __init multithreaded_module_init(void)
 	get_task_struct(thread2);
 	wake_up_process(thread1);
 	wake_up_process(thread2);
+
+	reader1 = kthread_run(reader, "reader1", "reader1");
+	reader2 = kthread_run(reader, "reader2", "reader2");
+	writer1 = kthread_run(writer, "writer1", "writer1");
+
 	return 0;
 }
 
@@ -73,6 +124,21 @@ static void __exit multithreaded_module_exit(void)
 		put_task_struct(thread2);
 	}
 	pr_info("global_counter is :%d", global_counter);
+
+	if (reader1) {
+		int rc = kthread_stop(reader1);
+		WARN_ON(-EINTR == rc);
+	}
+
+	if (reader2) {
+		int rc = kthread_stop(reader2);
+		WARN_ON(-EINTR == rc);
+	}
+
+	if (writer1) {
+		int rc = kthread_stop(writer1);
+		WARN_ON(-EINTR == rc);
+	}
 }
 
 module_init(multithreaded_module_init);
