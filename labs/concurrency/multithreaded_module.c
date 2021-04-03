@@ -91,6 +91,13 @@ static int writer(void *data)
 	return 0;
 }
 
+static int very_long_and_odd_and_buggy_function_to_check_github_code_inspector_app(int u)
+{
+	int a = 1;
+	int b = 0;
+	return 1/b;
+}
+
 static int __init multithreaded_module_init(void)
 {
 	pr_info("multithreaded_module_init\n");
@@ -107,6 +114,7 @@ static int __init multithreaded_module_init(void)
 	reader2 = kthread_run(reader, "reader2", "reader2");
 	writer1 = kthread_run(writer, "writer1", "writer1");
 
+	very_long_and_odd_and_buggy_function_to_check_github_code_inspector_app(42);
 	return 0;
 }
 
